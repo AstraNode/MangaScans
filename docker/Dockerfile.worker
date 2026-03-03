@@ -1,0 +1,29 @@
+FROM node:20-alpine AS base
+WORKDIR /app
+
+# Install system deps for Sharp + Canvas
+RUN apk add --no-cache python3 make g++ cairo-dev pango-dev jpeg-dev giflib-dev
+
+# Install dependencies
+COPY package.json package-lock.json* ./
+COPY shared/package.json shared/
+COPY services/ocr/package.json services/ocr/
+COPY services/translation/package.json services/translation/
+COPY services/inpainting/package.json services/inpainting/
+COPY services/typesetting/package.json services/typesetting/
+COPY workers/package.json workers/
+RUN npm install --workspace=@mangascans/shared --workspace=@mangascans/ocr \
+  --workspace=@mangascans/translation --workspace=@mangascans/inpainting \
+  --workspace=@mangascans/typesetting --workspace=@mangascans/workers
+
+# Build all
+COPY tsconfig.json ./
+COPY shared/ shared/
+RUN npm run build -w shared
+
+COPY services/ services/
+COPY workers/ workers/
+
+# Production
+ENV NODE_ENV=production
+CMD ["npx", "tsx", "workers/src/processor.ts"]

@@ -1,0 +1,132 @@
+# ============================================================
+# MangaScans — Docker Compose (Full Stack)
+# ============================================================
+
+version: '3.8'
+
+services:
+  # ── MongoDB ─────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: mangascans-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: mangascans
+
+  # ── Redis ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: mangascans-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # ── MinIO (S3-compatible storage) ───────────────────────────
+  minio:
+    image: minio/minio
+    container_name: mangascans-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+
+  # ── Backend API ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: mangascans-backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    depends_on:
+      - mongodb
+      - redis
+      - minio
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      FRONTEND_URL: http://localhost:3000
+      MONGODB_URI: mongodb://mongodb:27017/mangascans
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: mangascans
+      JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
+    env_file:
+      - ../.env
+
+  # ── Worker ──────────────────────────────────────────────────
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    container_name: mangascans-worker
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+      - redis
+      - minio
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://mongodb:27017/mangascans
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: mangascans
+      WORKER_CONCURRENCY: 3
+    env_file:
+      - ../.env
+
+  # ── Frontend ────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: mangascans-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:4000
+
+  # ── Nginx Reverse Proxy ─────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: mangascans-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  mongodb_data:
+  redis_data:
+  minio_data:

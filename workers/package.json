@@ -1,0 +1,23 @@
+{
+    "name": "@mangascans/workers",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "dev": "tsx watch src/processor.ts",
+        "build": "tsc",
+        "start": "node dist/processor.js"
+    },
+    "dependencies": {
+        "@mangascans/shared": "*",
+        "@mangascans/ocr": "*",
+        "@mangascans/translation": "*",
+        "@mangascans/inpainting": "*",
+        "@mangascans/typesetting": "*",
+        "sharp": "^0.33.2"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.0",
+        "tsx": "^4.7.0",
+        "typescript": "^5.4.0"
+    }
+}
